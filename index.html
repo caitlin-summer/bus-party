@@ -188,36 +188,61 @@ function mix0(a,b,t){
   const A=parseInt(a.slice(1),16),B=parseInt(b.slice(1),16),f=sh=>Math.round(((A>>sh)&255)*(1-t)+((B>>sh)&255)*t);
   return 'rgb('+f(16)+','+f(8)+','+f(0)+')';
 }
+function trapz(xa,xb,ha,hb){ctx.beginPath();ctx.moveTo(xa,-ha);ctx.lineTo(xb,-hb);ctx.lineTo(xb,hb);ctx.lineTo(xa,ha);ctx.closePath();ctx.fill();}
 function drawBus(x,y,len,wid,ang,col,o){
   o=o||{};
-  const C=o.hidden?{c:'#5b6478',d:'#39414f',l:'#8a93a6'}:PAL[col];
+  const hid=o.hidden,C=hid?{c:'#6b7488',d:'#434b5c',l:'#9aa3b5'}:PAL[col];
   ctx.save();ctx.translate(x+(o.dx||0),y+(o.dy||0));
   if(o.scale&&o.scale!==1)ctx.scale(o.scale,o.scale);
+  const hl=len/2,hw=wid/2,ratio=len/wid,kind=ratio<1.8?0:ratio<3.4?1:2,r=Math.min(hw*.62,len*.2);
+  // bóng đổ (luôn lệch xuống)
+  ctx.save();ctx.translate(0,wid*.1+1.5);ctx.rotate(ang);ctx.fillStyle='rgba(20,34,56,.24)';rr(-hl,-hw,len,wid,r);ctx.fill();ctx.restore();
   ctx.rotate(ang);
-  const rad=Math.min(wid*.3,len*.28),bw=wid*.92;
-  ctx.fillStyle='#232b3b';                                  // bánh xe
-  [-.3,.3].forEach(k=>{rr(len*k-len*.09,-wid/2-wid*.035,len*.18,wid*.12,wid*.04);ctx.fill();rr(len*k-len*.09,wid/2-wid*.06,len*.18,wid*.12,wid*.04);ctx.fill();});
-  ctx.fillStyle='rgba(24,36,64,.13)';rr(-len/2-1.5,-wid/2+1,len+3,bw+4.5,rad+2);ctx.fill();ctx.fillStyle='rgba(24,36,64,.20)';rr(-len/2,-wid/2+3,len,bw,rad);ctx.fill();
-  const gr=ctx.createLinearGradient(0,-wid/2,0,-wid/2+bw);gr.addColorStop(0,mix(C.c,'#ffffff',.22));gr.addColorStop(1,mix(C.c,C.d,.28));
-  ctx.fillStyle=gr;rr(-len/2,-wid/2,len,bw,rad);ctx.fill();
-    ctx.strokeStyle='rgba(0,0,0,.16)';ctx.lineWidth=1;rr(-len/2,-wid/2,len,bw,rad);ctx.stroke();
-  ctx.fillStyle='rgba(255,255,255,.15)';rr(-len*.4,-wid*.34,len*.62,bw*.6,rad*.6);ctx.fill();       // mui xe
-  if(!o.hidden){
-    ctx.fillStyle='#27314d';rr(len*.27,-wid*.37,len*.16,wid*.66,wid*.1);ctx.fill();                  // kính trước
-    ctx.fillStyle='rgba(255,255,255,.3)';rr(len*.295,-wid*.31,len*.035,wid*.22,wid*.03);ctx.fill();
-    ctx.fillStyle='#27314d';rr(-len*.46,-wid*.31,len*.07,wid*.52,wid*.07);ctx.fill();                // kính sau
-    ctx.fillStyle='#fff3b0';ctx.beginPath();ctx.arc(len/2-wid*.1,-wid*.3,wid*.07,0,TAU);ctx.arc(len/2-wid*.1,wid*.26,wid*.07,0,TAU);ctx.fill();
+  // bánh xe
+  const wl=Math.min(len*.18,wid*.52),wt=wid*.16;ctx.fillStyle='#161c2a';
+  (kind===2?[-.32,.3]:kind===1?[-.3,.28]:[-.27,.27]).forEach(k=>{rr(len*k-wl/2,-hw-wt*.5,wl,wt,wt*.4);ctx.fill();rr(len*k-wl/2,hw-wt*.5,wl,wt,wt*.4);ctx.fill();});
+  // thân xe
+  const gr=ctx.createLinearGradient(0,-hw,0,hw);gr.addColorStop(0,mix(C.c,'#ffffff',.32));gr.addColorStop(.45,C.c);gr.addColorStop(1,mix(C.c,C.d,.5));
+  ctx.fillStyle=gr;rr(-hl,-hw,len,wid,r);ctx.fill();
+  ctx.lineWidth=Math.max(1.2,wid*.045);ctx.strokeStyle='rgba(18,28,48,.62)';rr(-hl,-hw,len,wid,r);ctx.stroke();
+  // đèn trước / đèn sau
+  ctx.fillStyle='#fff7c4';rr(hl-wid*.11,-hw+wid*.09,wid*.1,wid*.2,wid*.04);ctx.fill();rr(hl-wid*.11,hw-wid*.29,wid*.1,wid*.2,wid*.04);ctx.fill();
+  ctx.fillStyle='#e5484d';rr(-hl+wid*.01,-hw+wid*.09,wid*.08,wid*.18,wid*.03);ctx.fill();rr(-hl+wid*.01,hw-wid*.27,wid*.08,wid*.18,wid*.03);ctx.fill();
+  if(!hid){
+    const roof=mix(C.c,'#ffffff',.26),glass='#22304a';
+    let ax;
+    if(kind===0){                                                   // ô tô con
+      ctx.fillStyle=roof;rr(-len*.2,-hw*.72,len*.34,wid*.72,wid*.14);ctx.fill();
+      ctx.fillStyle=glass;trapz(len*.12,len*.3,hw*.74,hw*.58);trapz(-len*.33,-len*.2,hw*.56,hw*.7);
+      ctx.fillStyle='rgba(255,255,255,.3)';trapz(len*.15,len*.19,hw*.6,hw*.55);
+      ctx.fillStyle=C.d;rr(len*.2,-hw-wid*.07,len*.06,wid*.1,wid*.03);ctx.fill();rr(len*.2,hw-wid*.03,len*.06,wid*.1,wid*.03);ctx.fill();   // gương
+      ax=-len*.03;
+    }else if(kind===1){                                             // xe khách nhỏ
+      ctx.fillStyle=roof;rr(-len*.41,-hw*.8,len*.66,wid*.8,wid*.14);ctx.fill();
+      ctx.strokeStyle='rgba(18,28,48,.22)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(-len*.12,-hw*.7);ctx.lineTo(-len*.12,hw*.7);ctx.moveTo(len*.1,-hw*.7);ctx.lineTo(len*.1,hw*.7);ctx.stroke();
+      ctx.fillStyle=glass;trapz(len*.27,len*.4,hw*.8,hw*.62);rr(-len*.48,-hw*.52,len*.05,wid*.52,wid*.05);ctx.fill();
+      ctx.fillStyle='rgba(255,255,255,.3)';trapz(len*.3,len*.33,hw*.66,hw*.6);
+      ax=-len*.08;
+    }else{                                                          // xe buýt dài
+      ctx.fillStyle=roof;rr(-len*.45,-hw*.84,len*.8,wid*.84,wid*.12);ctx.fill();
+      ctx.fillStyle=mix(C.c,'#ffffff',.5);ctx.strokeStyle='rgba(18,28,48,.3)';ctx.lineWidth=1;
+      [-.33,-.18,.17].forEach(k=>{rr(len*k-len*.045,-hw*.46,len*.09,wid*.46,wid*.06);ctx.fill();ctx.stroke();});
+      ctx.fillStyle=glass;trapz(len*.36,len*.47,hw*.84,hw*.7);rr(-len*.49,-hw*.6,len*.03,wid*.6,wid*.04);ctx.fill();
+      ctx.fillStyle='rgba(255,255,255,.3)';trapz(len*.39,len*.42,hw*.7,hw*.64);
+      ax=len*.0;
+    }
+    ctx.fillStyle='rgba(255,255,255,.2)';rr(-hl+len*.1,-hw+wid*.06,len*.8,wid*.09,wid*.04);ctx.fill();   // phản chiếu mép trên
     if(!o.noArrow){
-      const cy=-wid*.04,tip=len*.15,hs=wid*.2;
-      ctx.strokeStyle='rgba(255,255,255,.96)';ctx.lineWidth=Math.max(2,wid*.09);ctx.lineCap='round';ctx.lineJoin='round';
-      ctx.beginPath();ctx.moveTo(-len*.18,cy);ctx.lineTo(tip,cy);ctx.moveTo(tip-hs,cy-hs);ctx.lineTo(tip,cy);ctx.lineTo(tip-hs,cy+hs);ctx.stroke();
+      const al=Math.min(len*.34,wid*1.15),cx=ax-al*.5,tip=ax+al*.5,hs=Math.min(wid*.2,al*.3);
+      ctx.lineCap='round';ctx.lineJoin='round';
+      [['rgba(18,28,48,.7)',Math.max(3.6,wid*.15)],['#ffffff',Math.max(2,wid*.085)]].forEach(([c,lw])=>{ctx.strokeStyle=c;ctx.lineWidth=lw;ctx.beginPath();ctx.moveTo(cx,0);ctx.lineTo(tip,0);ctx.moveTo(tip-hs,-hs);ctx.lineTo(tip,0);ctx.lineTo(tip-hs,hs);ctx.stroke();});
     }
   }else{
-    ctx.rotate(-ang);ctx.font='800 '+(wid*.6)+'px '+FONT;ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.fillStyle='#ffffff';ctx.globalAlpha=.9;ctx.fillText('?',0,wid*.04);ctx.globalAlpha=1;ctx.rotate(ang);
+    ctx.rotate(-ang);ctx.font='800 '+(wid*.62)+'px '+FONT;ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillStyle='#ffffff';ctx.globalAlpha=.92;ctx.fillText('?',0,wid*.04);ctx.globalAlpha=1;ctx.rotate(ang);
   }
-  if(o.flash>0){ctx.fillStyle='rgba(255,70,70,'+(o.flash*.55)+')';rr(-len/2,-wid/2,len,bw,rad);ctx.fill();}
-  if(o.glow){ctx.strokeStyle='rgba(255,255,255,.95)';ctx.lineWidth=3;rr(-len/2-2,-wid/2-2,len+4,bw+4,rad+2);ctx.stroke();}
+  if(o.flash>0){ctx.fillStyle='rgba(255,70,70,'+(o.flash*.55)+')';rr(-hl,-hw,len,wid,r);ctx.fill();}
+  if(o.glow){ctx.strokeStyle='rgba(255,255,255,.95)';ctx.lineWidth=3;rr(-hl-2,-hw-2,len+4,wid+4,r+2);ctx.stroke();}
   ctx.restore();
 }
 
@@ -233,20 +258,20 @@ function layout(){
   const oldLen=ring.len;
   RW=innerWidth;H=innerHeight;DPR=Math.min(window.devicePixelRatio||1,2,Math.sqrt(2.4e6/(innerWidth*innerHeight)));DPR=Math.max(1,DPR);BG.k='';
   cv.width=Math.round(RW*DPR);cv.height=Math.round(H*DPR);
-  W=RW/H>1.05?Math.round(Math.min(RW,Math.max(420,H*1.3))):RW;OX=Math.round((RW-W)/2);
+  W=RW/H>1.05?Math.round(Math.min(RW,Math.max(420,H*1.62))):RW;OX=Math.round((RW-W)/2);
   L.land=RW/H>1.05;
-  const topH=clamp(H*.075,50,72),ringH=H*(L.land?.34:.31),slotH=clamp(H*(L.land?.1:.105),62,110);
-  const boostH=L.land?0:clamp(H*.115,78,112);
+  const topH=clamp(H*.075,50,72),ringH=H*(L.land?.32:.3),slotH=clamp(H*.125,72,120);
+  const boostH=0;
   Object.assign(L,{topH,boostH,ringY:topH,ringH,slotY:topH+ringH,slotH});
   L.gridY=L.slotY+slotH+4;
   if(L.land){
-    L.boostW=clamp(W*.12,92,132);
-    L.gridX=L.boostW+28;L.gridW=W-2*(L.boostW+28);L.gridH=H-L.gridY-12;
+    L.boostW=0;
+    L.gridX=24;L.gridW=W-48;L.gridH=H-L.gridY-12;
   }else{L.gridX=10;L.gridW=W-20;L.gridH=H-boostH-L.gridY-4;}
-  const tw=Math.min(W-16,L.land?720:W-16),sw=tw/5;
-  L.slots=[];for(let i=0;i<5;i++)L.slots.push({x:(W-tw)/2+i*sw+3,y:L.slotY+10,w:sw-6,h:slotH-34});
+  const tw=Math.min(W-16,L.land?820:W-16),sw=tw/4;
+  L.slots=[];for(let i=0;i<4;i++)L.slots.push({x:(W-tw)/2+i*sw+4,y:L.slotY+8,w:sw-8,h:slotH-32});
   const rg=L.rg={cx:W/2};
-  rg.hw=L.land?Math.min(W*.3,430):Math.min(W*.27,260);
+  rg.hw=L.land?Math.min(W*.33,500):Math.min(W*.27,260);
   rg.hh=ringH*(L.land?.3:.32);rg.cy=L.ringY+ringH*(L.land?.5:.47);rg.r=Math.min(rg.hh*.92,rg.hw*.6);
   buildRing();
   ring.d=clamp(ring.len/48,15,27);ring.g=ring.d*1.05;ring.pr=ring.d*.56;
@@ -256,13 +281,7 @@ function layout(){
   if(oldLen>1&&Math.abs(oldLen-ring.len)>.5){const k=ring.len/oldLen;ring.items.forEach(i=>i.s*=k);}
   const hb=clamp(topH-10,40,54),hy=(topH-hb)/2;
   L.hud={pause:{x:W-12-hb,y:hy,w:hb,h:hb}};
-  if(L.land){
-    const bw=L.boostW,bh=clamp(L.gridH*.3,84,116),by=L.gridY+(L.gridH-bh)/2;
-    L.boost=[{k:'vip',x:12,y:by,w:bw,h:bh},{k:'shuffle',x:W-12-bw,y:by,w:bw,h:bh}];
-  }else{
-    const bw=clamp((W-48)/2,92,200),bh=boostH-16,gap=14,tot=bw*2+gap;
-    L.boost=['vip','shuffle'].map((k,i)=>({k,x:(W-tot)/2+i*(bw+gap),y:H-boostH+8,w:bw,h:bh}));
-  }
+  L.boost=[];
   if(G)setCell();
 }
 function buildRing(){
@@ -377,7 +396,7 @@ function startLevel(lv,mode){
   buses.forEach(b=>cellsOf(b).forEach(([x,y])=>occ[y][x]=b));
   G={lv,cols,rows,buses,occ,t:0,state:'play',paused:false,flyers:[],parts:[],slots:[],boost:{vip:1,shuffle:1},vipMode:false,
      toast:'',toastT:0,bumps:0,moves:0,stuck:0,streak:0,lastBoard:-9,hover:null,endT:0,total:buses.length,earned:0,cs:1,gx0:0,gy0:0,puffT:0,mode,timeLimit:mode,timeLeft:mode,lastTick:-1};
-  for(let i=0;i<5;i++)G.slots.push({bus:null,locked:false});
+  for(let i=0;i<4;i++)G.slots.push({bus:null,locked:false});
   setCell();buildSupply();revealCheck(true);
   screen='play';
   if(mode)toast('Đồng hồ '+mode+' giây chạy từ lần bấm xe đầu tiên!',4);
@@ -396,7 +415,7 @@ function buildSupply(){
 function toast(m,t){if(!G)return;G.toast=m;G.toastT=t||2.6;}
 
 /* ====================== luật chơi ====================== */
-function freeSlotIndex(){for(let i=1;i<=4;i++){const s=G.slots[i];if(!s.bus)return i;}return -1;}
+function freeSlotIndex(){for(let i=0;i<4;i++){const s=G.slots[i];if(!s.bus)return i;}return -1;}
 function tapBus(b){
   const g=G;if(b.state!=='grid')return;
   if(g.vipMode){vipBus(b);return;}
@@ -406,7 +425,9 @@ function tapBus(b){
   if(si<0){toast('Bãi đậu đầy! Chờ một xe đầy khách rời bãi.');SFX.deny();return;}
   launch(b,si,false);
 }
-function pxOf(b){const g=G;b.x=g.gx0+(b.c+b.w/2)*g.cs;b.y=g.gy0+(b.r+b.h/2)*g.cs;b.dl=b.len*g.cs-g.cs*.16;b.dw=g.cs*.78;}
+const PARK_R=[0,1.5,2.5,3.4];
+function parkDims(b,sl){const r=PARK_R[b.len]||2.5,dw=Math.min(sl.h*.9,sl.w*.94/r);return {l:dw*r,w:dw};}
+function pxOf(b){const g=G;b.x=g.gx0+(b.c+b.w/2)*g.cs;b.y=g.gy0+(b.r+b.h/2)*g.cs;b.dl=b.len*g.cs-g.cs*.1;b.dw=g.cs*.62;}
 function launch(b,si,direct){
   const g=G;pxOf(b);
   cellsOf(b).forEach(([x,y])=>g.occ[y][x]=null);
@@ -451,7 +472,7 @@ function boostShuffle(){
 }
 function tryBoard(it){
   const g=G;
-  for(let i=0;i<5;i++){
+  for(let i=0;i<4;i++){
     const b=g.slots[i].bus;
     if(b&&b.state==='parked'&&b.rem>0&&b.col===it.col){
       it.dead=true;const p=ringPos(it.s,laneOff(it.lane)+it.ey);
@@ -538,11 +559,11 @@ function update(dt){
       const f=b.fl;f.t+=dt/f.dur;const t=Math.min(1,f.t),e=t*t*(3-2*t);
       const sl=L.slots[b.slot],tx=sl.x+sl.w/2,ty=sl.y+sl.h/2,cx=(f.x0+tx)/2,cy=Math.min(f.y0,ty)-30,u=1-e;
       b.x=u*u*f.x0+2*u*e*cx+e*e*tx;b.y=u*u*f.y0+2*u*e*cy+e*e*ty;
-      const da=((-Math.PI/2-f.a0+3*Math.PI)%TAU)-Math.PI;b.ang=f.a0+da*e;
-      b.dl=lerp(f.l0,sl.h*.9,e);b.dw=lerp(f.w0,sl.w*.8,e);
-      if(t>=1){b.state='parked';b.rem=b.cap;b.inflight=0;b.pop=1;b.ang=-Math.PI/2;SFX.park();burst(tx,ty+sl.h*.4,'#ffffff',8,90);}
+      const da=((0-f.a0+3*Math.PI)%TAU)-Math.PI;b.ang=f.a0+da*e;
+      const pd=parkDims(b,sl);b.dl=lerp(f.l0,pd.l,e);b.dw=lerp(f.w0,pd.w,e);
+      if(t>=1){b.state='parked';b.rem=b.cap;b.inflight=0;b.pop=1;b.ang=0;SFX.park();burst(tx,ty+sl.h*.4,'#ffffff',8,90);}
     }else if(b.state==='parked'){
-      const sl=L.slots[b.slot];b.x=sl.x+sl.w/2;b.y=sl.y+sl.h/2;b.dl=sl.h*.9;b.dw=sl.w*.8;
+      const sl=L.slots[b.slot];b.x=sl.x+sl.w/2;b.y=sl.y+sl.h/2;{const pd=parkDims(b,sl);b.dl=pd.l;b.dw=pd.w;}
       if(b.rem<=0&&b.inflight<=0)depart(b);
     }else if(b.state==='leave'){
       b.vel+=2600*dt;b.x+=b.vel*dt;b.ang+=(0-b.ang)*Math.min(1,dt*9);
@@ -596,11 +617,11 @@ function drawRoad(){
   L.slots.forEach((s,i)=>{
     const sl=G.slots[i];
     ctx.lineWidth=2.5;
-    if(i===0){ctx.strokeStyle=vipOpen?'#fff2a8':'#ffb21a';ctx.fillStyle=vipOpen?'rgba(255,200,60,.35)':'rgba(255,178,26,.1)';}
+    if(false){ctx.strokeStyle=vipOpen?'#fff2a8':'#ffb21a';ctx.fillStyle=vipOpen?'rgba(255,200,60,.35)':'rgba(255,178,26,.1)';}
     else if(sl.locked){ctx.strokeStyle='#59d37a';ctx.fillStyle='rgba(89,211,122,.1)';}
     else{ctx.strokeStyle='rgba(255,255,255,.32)';ctx.fillStyle='rgba(255,255,255,.06)';}
     rr(s.x,s.y,s.w,s.h,10);ctx.fill();ctx.stroke();
-    if(i===0&&!sl.bus){ctx.save();ctx.translate(s.x+s.w/2,s.y+s.h/2);ctx.rotate(-Math.PI/2);txt('VIP',0,0,Math.min(s.w*.5,s.h*.42),'#ffb21a');ctx.restore();}
+    if(false){ctx.save();ctx.translate(s.x+s.w/2,s.y+s.h/2);ctx.rotate(-Math.PI/2);txt('VIP',0,0,Math.min(s.w*.5,s.h*.42),'#ffb21a');ctx.restore();}
     if(sl.locked){
       ctx.strokeStyle='#59d37a';ctx.lineWidth=5;ctx.lineCap='round';const cx=s.x+s.w/2,cy=s.y+s.h*.4,k=Math.min(s.w,s.h)*.2;
       ctx.beginPath();ctx.moveTo(cx-k,cy);ctx.lineTo(cx+k,cy);ctx.moveTo(cx,cy-k);ctx.lineTo(cx,cy+k);ctx.stroke();
@@ -664,8 +685,16 @@ function drawCrowd(){
   for(let f=0;f<2;f++){
     const n=ring.feed[f][0].q.length-ring.feed[f][0].head+ring.feed[f][1].q.length-ring.feed[f][1].head;
     if(n<=0)continue;
-    const e=ringPos(ring.ent[f].sc,(ring.qmax+1)*d*.5+ring.g),bx=e.x,by=e.y-(ring.g+d*1.15)/2-15;
-    rr(bx-22,by-10,44,20,10);ctx.fillStyle='rgba(29,39,54,.88)';ctx.fill();txt(String(n),bx,by+1,13,'#fff');
+    const e=ringPos(ring.ent[f].sc,(ring.qmax+1)*d*.5+ring.g),bx=e.x,by=Math.max(L.topH+18,e.y-(ring.g+d*1.15)/2-17-(ring.pr*2+10));
+    // các màu sắp vào (gộp liên tiếp cùng màu)
+    const q=ring.feed[f][0].q,runs=[];
+    for(let i=ring.feed[f][0].head;i<q.length&&runs.length<(W<480?4:6);i++){const c=q[i];if(runs.length&&runs[runs.length-1].c===c)runs[runs.length-1].n++;else runs.push({c,n:1});}
+    const cr=9,gap=5,cw=runs.length*(cr*2+gap)-gap,txtW=String(n).length*8+14,pw=txtW+(runs.length?cw+14:0),ph=26;
+    const px=f===0?8:W-8-pw,py=by-ph/2;
+    rr(px,py,pw,ph,13);ctx.fillStyle='rgba(29,39,54,.9)';ctx.fill();
+    txt(String(n),px+txtW/2+2,py+ph/2+1,13,'#fff');
+    runs.forEach((ru,i)=>{const cx=px+txtW+8+cr+i*(cr*2+gap),C=PAL[ru.c],rr0=i?cr*.86:cr;
+      ctx.beginPath();ctx.arc(cx,py+ph/2,rr0,0,TAU);ctx.fillStyle=C.c;ctx.fill();ctx.lineWidth=i?1.5:2.4;ctx.strokeStyle='#fff';ctx.stroke();});
   }
 }
 function drawBuses(){
@@ -753,7 +782,7 @@ function drawBoosters(){
 }
 function drawToast(){
   const g=G;
-  if(g.vipMode){const y=L.topH+L.ringH*.5;rr(W/2-150,L.topH+6,300,32,16);ctx.fillStyle='rgba(255,178,26,.95)';ctx.fill();txt('Bấm vào xe để đưa vào ô VIP',W/2,L.topH+23,16,'#5a3300');}
+  if(g.vipMode){const y=L.topH+L.ringH*.5;rr(W/2-150,L.topH+6,300,32,16);ctx.fillStyle='rgba(255,178,26,.95)';ctx.fill();txt('',W/2,L.topH+23,16,'#5a3300');}
   else if(g.toastT>0){
     ctx.font='700 17px '+FONT;const w=Math.min(W-24,ctx.measureText(g.toast).width+40);
     ctx.globalAlpha=clamp(g.toastT*3,0,1);rr(W/2-w/2,L.topH+6,w,34,17);ctx.fillStyle='rgba(29,39,54,.92)';ctx.fill();
@@ -827,7 +856,7 @@ function draw(){
   if(screen!=='play'||!G){drawMenuBg();return;}
   if(OX>0)drawSides();
   ctx.setTransform(DPR,0,0,DPR,OX*DPR,0);
-  drawStatic();drawRoad();drawCrowd();drawBuses();drawHud();drawBoosters();drawToast();
+  drawStatic();drawRoad();drawCrowd();drawBuses();drawHud();drawToast();
 }
 let last=0;
 function loop(ts){
@@ -901,7 +930,7 @@ function showOv(kind){
     <li>Xe đậu sẽ đón khách cùng màu đi qua cổng của băng chuyền. Đủ khách thì xe tự chạy đi, nhường chỗ cho xe khác.</li>
     <li>Xe có dấu "?" lộ màu khi hết bị chặn hoặc khi xe bên cạnh rời đi.</li>
     <li>Bãi đầy mà băng chuyền không có khách đúng màu là kẹt xe. Hãy chọn xe có màu khách đang xuất hiện.</li>
-    <li>VIP đưa một xe bất kỳ vào ô VIP, Trộn xáo đám đông. Mỗi loại dùng 1 lần mỗi màn.</li>
+    <li>Chỉ có 4 ô đậu. Hãy xem dải màu nhỏ ở hai cổng để biết màu khách sắp vào, rồi chọn xe thích hợp.</li>
     <li>Thử thách thời gian (30, 45 hoặc 60 giây): đưa hết xe đi trước khi đồng hồ về 0, còn dư càng nhiều giờ càng được nhiều sao. Qua màn được điểm, càng nhiều sao càng nhiều điểm. Điểm lưu theo tên học sinh.</li>
     <li>Phím tắt: Esc tạm dừng, M bật/tắt âm thanh.</li></ol>
     <button class="btn big green" data-a="${G&&screen==='play'?'pause':'menu'}">${ico('check')}Đã hiểu</button></div>`;
