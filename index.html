@@ -92,6 +92,8 @@ const DX=[0,1,0,-1],DY=[-1,0,1,0];            // 0 lên, 1 phải, 2 xuống, 3 
 const ANG=[-Math.PI/2,0,Math.PI/2,Math.PI];
 const FONT='"Inter","SF Pro Display","Segoe UI",sans-serif';
 const store={get(k,d){try{const v=localStorage.getItem('bfp_'+k);return v===null?d:JSON.parse(v);}catch(e){return d;}},set(k,v){try{localStorage.setItem('bfp_'+k,JSON.stringify(v));}catch(e){}}};
+let clearArm=false;
+let RUN={pts:0,lv:0};
 const S={name:store.get('name',''),level:1,tlevel:1,coins:0,sound:store.get('sound',true)};
 let players=store.get('players',{});if(!players||typeof players!=='object')players={};
 function loadProfile(n){S.name=n;const p=players[n]||{};S.coins=p.score|0;S.level=p.level||1;S.tlevel=p.tlevel||1;store.set('name',n);}
@@ -275,7 +277,7 @@ function layout(){
   rg.hh=ringH*(L.land?.3:.32);rg.cy=L.ringY+ringH*(L.land?.5:.47);rg.r=Math.min(rg.hh*.92,rg.hw*.6);
   buildRing();
   ring.d=clamp(ring.len/48,15,27);ring.g=ring.d*1.05;ring.pr=ring.d*.56;
-  ring.cap=Math.floor(2*ring.len/ring.d*.72);ring.v=ring.len/10.5;
+  ring.cap=Math.floor(2*ring.len/ring.d*.72);ring.v=ring.len/7;
   ring.ent=[6,2].map(i=>({sc:ring.segs[i].s0+ring.segs[i].len/2}));   // cổng trái (đoạn đi lên), cổng phải (đoạn đi xuống)
   ring.qmax=clamp(Math.floor((rg.cx-rg.hw-(L.land?26:6)-ring.g*.5-ring.pr)/ring.d),2,7);
   if(oldLen>1&&Math.abs(oldLen-ring.len)>.5){const k=ring.len/oldLen;ring.items.forEach(i=>i.s*=k);}
@@ -387,7 +389,7 @@ function revealNeighbors(b){
 }
 
 /* ====================== khởi tạo màn ====================== */
-function startLevel(lv,mode){
+function startLevel(lv,mode,carry){
   mode=mode||0;
   const {cols,rows}=calcDims();
   const maxN=mode?({30:5,45:8,60:11})[mode]:0;
@@ -395,12 +397,11 @@ function startLevel(lv,mode){
   const occ=Array.from({length:rows},()=>Array(cols).fill(null));
   buses.forEach(b=>cellsOf(b).forEach(([x,y])=>occ[y][x]=b));
   G={lv,cols,rows,buses,occ,t:0,state:'play',paused:false,flyers:[],parts:[],slots:[],boost:{vip:1,shuffle:1},vipMode:false,
-     toast:'',toastT:0,bumps:0,moves:0,stuck:0,streak:0,lastBoard:-9,hover:null,endT:0,total:buses.length,earned:0,cs:1,gx0:0,gy0:0,puffT:0,mode,timeLimit:mode,timeLeft:mode,lastTick:-1};
+     toast:'',toastT:0,bumps:0,moves:0,stuck:0,streak:0,lastBoard:-9,hover:null,endT:0,total:buses.length,earned:0,cs:1,gx0:0,gy0:0,puffT:0,mode,timeLimit:mode,timeLeft:(mode&&carry>0)?Math.min(carry,mode):mode,lastTick:-1};
   for(let i=0;i<4;i++)G.slots.push({bus:null,locked:false});
   setCell();buildSupply();revealCheck(true);
   screen='play';
-  if(mode)toast('Đồng hồ '+mode+' giây chạy từ lần bấm xe đầu tiên!',4);
-  else if(lv===1)toast('Bấm xe có đường trống để xe chạy ra!',4.5);
+  if(!mode&&lv===1)toast('Bấm xe có đường trống để xe chạy ra!',4.5);
 }
 function buildSupply(){
   const groups=G.buses.slice().reverse().map(b=>({col:b.col,n:b.cap}));       // thứ tự = thứ tự giải
@@ -476,7 +477,7 @@ function tryBoard(it){
     const b=g.slots[i].bus;
     if(b&&b.state==='parked'&&b.rem>0&&b.col===it.col){
       it.dead=true;const p=ringPos(it.s,laneOff(it.lane)+it.ey);
-      g.flyers.push({x0:p.x,y0:p.y,bus:b,col:it.col,seed:it.sd,t:0,dur:.36+Math.random()*.08});
+      g.flyers.push({x0:p.x,y0:p.y,bus:b,col:it.col,seed:it.sd,t:0,dur:.2+Math.random()*.05});
       b.rem--;b.inflight++;
       g.streak=(T-g.lastBoard<.3)?g.streak+1:0;g.lastBoard=T;SFX.board(g.streak);
       return;
@@ -496,12 +497,13 @@ function depart(b){
 function win(){
   const g=G;g.state='won';g.endT=0;
   const stars=g.mode?(g.timeLeft>g.timeLimit*.5?3:g.timeLeft>g.timeLimit*.2?2:1):(g.bumps<=3?3:g.bumps<=9?2:1);g.stars=stars;
-  g.earned=30+g.lv*2+(g.mode?15:0)+stars*10;S.coins+=g.earned;if(g.mode)S.tlevel=g.lv+1;else S.level=g.lv+1;
+  g.earned=30+g.lv*2+(g.mode?15:0)+stars*10;S.coins+=g.earned;if(g.mode){RUN.pts+=g.earned;RUN.lv++;}if(g.mode)S.tlevel=g.lv+1;else S.level=g.lv+1;
   saveProfile();
   SFX.win();confetti();
 }
 function lose(){
   const g=G;g.state='lost';g.endT=0;SFX.lose();
+  if(g.mode){g.jam=true;showOv('timeup');return;}
   showOv('lost');
 }
 
@@ -518,10 +520,11 @@ function tickTimer(dt){
 function update(dt){
   const g=G;g.t+=dt;if(g.toastT>0)g.toastT-=dt;
   const d=ring.d;
+  const left4=g.buses.filter(b=>b.state!=='leave'&&b.state!=='gone').length,rush=(g.state==='play'&&left4>0&&left4<=4)?1.8:1;g.rush=rush;
   if(g.state==='play'){
     // băng chuyền
     for(const it of ring.items){
-      const ns=it.s+ring.v*(g.mode?1.2:1)*dt;
+      const ns=it.s+ring.v*(g.mode?1.2:1)*rush*dt;
       if(!it.dead&&it.ey<d*.3&&Math.floor((ns-ring.exitS)/ring.len)>Math.floor((it.s-ring.exitS)/ring.len))tryBoard(it);
       it.s=ns%ring.len;
       if(it.ey>0)it.ey=Math.max(0,it.ey-d*4*dt);
@@ -542,7 +545,7 @@ function update(dt){
   }
   // hành khách bay
   for(const fl of g.flyers){
-    fl.t+=dt/fl.dur;
+    fl.t+=dt*rush/fl.dur;
     if(fl.t>=1){fl.bus.inflight--;fl.bus.pop=.6;fl.done=true;const b=fl.bus;burst(b.x,b.y-b.dl*.1,PAL[fl.col].l,3,80);}
   }
   g.flyers=g.flyers.filter(f=>!f.done);
@@ -578,7 +581,9 @@ function update(dt){
     if(g.buses.every(b=>b.state==='leave'||b.state==='gone')){win();}
     else{checkStuck(dt);tickTimer(dt);}
   }else if(g.state==='won'){
-    g.endT+=dt;if(g.endT>1.3&&!g.shown){g.shown=true;showOv('win');}
+    g.endT+=dt;
+    if(g.mode){if(g.endT>.95&&!g.shown){g.shown=true;startLevel(S.tlevel,g.mode,g.timeLeft);if(G)G.fade=true;}}
+    else if(g.endT>1.3&&!g.shown){g.shown=true;showOv('win');}
   }
 }
 function checkStuck(dt){
@@ -857,6 +862,10 @@ function draw(){
   if(OX>0)drawSides();
   ctx.setTransform(DPR,0,0,DPR,OX*DPR,0);
   drawStatic();drawRoad();drawCrowd();drawBuses();drawHud();drawToast();
+  const g=G;let ca=0;
+  if(g.mode&&g.state==='won')ca=clamp((g.endT-.65)/.3,0,1);
+  else if(g.fade&&g.t<.5)ca=1-g.t/.5;
+  if(ca>0){ctx.setTransform(DPR,0,0,DPR,0,0);ctx.globalAlpha=ca*ca*(3-2*ca);ctx.fillStyle='#eef2f9';ctx.fillRect(0,0,RW,H);ctx.globalAlpha=1;}
 }
 let last=0;
 function loop(ts){
@@ -918,10 +927,10 @@ function showOv(kind){
     const arr=Object.entries(players).sort((a,b)=>b[1].score-a[1].score||a[0].localeCompare(b[0])).slice(0,10);
     h=`<div class="card" style="--tone:#f2b01e">${badge('trophy','#f2b01e')}<h2>Bảng điểm</h2>
     ${arr.length?'<ol class="board">'+arr.map((e,i)=>'<li class="'+(e[0]===S.name?'me':'')+'"><span class="rk">'+(i+1)+'</span><span class="nn">'+esc(e[0])+'</span><small>Màn '+Math.max(e[1].level||1,e[1].tlevel||1)+'</small><b>'+e[1].score+'</b></li>').join('')+'</ol>':'<p>Chưa có học sinh nào chơi.</p>'}
-    <div class="row"><button class="btn grey" data-a="menu">${ico('back')}Quay lại</button>${arr.length?'<button class="btn red" data-a="clearboard">Xoá bảng điểm</button>':''}</div></div>`;
+    <div class="row"><button class="btn grey" data-a="menu">${ico('back')}Quay lại</button>${arr.length?'<button class="btn red" data-a="clearboard">'+(clearArm?'Bấm lần nữa để xoá hết':'Xoá bảng điểm')+'</button>':''}</div></div>`;
   }else if(kind==='modes'){
     h=`<div class="card" style="--tone:#f2b01e">${badge('clock','#f2b01e')}<h2>Thử thách thời gian</h2>
-    <p>Hoàn thành màn chơi trước khi hết giờ. Đồng hồ chỉ chạy từ lần bấm xe đầu tiên. Chế độ này có tiến trình riêng, bạn đang ở màn ${S.tlevel}.</p>
+    <p>Hoàn thành màn chơi trước khi hết giờ. Đồng hồ chỉ chạy từ lần bấm xe đầu tiên. Qua màn tự động, thời gian chạy liên tục và chỉ hiện kết quả khi kết thúc. Mỗi lượt bắt đầu từ màn 1.</p>
     <div class="row"><button class="btn big" data-a="t30">30 giây</button><button class="btn big" data-a="t45">45 giây</button><button class="btn big" data-a="t60">60 giây</button></div>
     <div><button class="btn grey" data-a="menu">${ico('back')}Quay lại</button></div></div>`;
   }else if(kind==='help'){
@@ -937,7 +946,7 @@ function showOv(kind){
   }else if(kind==='pause'){
     h=`<div class="card" style="--tone:#2f6fed">${badge('pause','#2f6fed')}<h2>Tạm dừng</h2><p>Màn ${G.lv}${G.mode?' · '+G.mode+' giây':''}</p>
     <div><button class="btn big green wide" data-a="resume">${ico('play')}Tiếp tục</button></div>
-    <div class="row"><button class="btn gold" data-a="restart">${ico('redo')}Chơi lại màn này</button>${soundBtn('dark')}</div>
+    <div class="row"><button class="btn gold" data-a="restart">${ico('redo')}${G.mode?'Chơi lại từ màn 1':'Chơi lại màn này'}</button>${soundBtn('dark')}</div>
     <div><button class="btn grey" data-a="menu">${ico('home')}Thoát về menu</button></div></div>`;
   }else if(kind==='win'){
     const st=G.stars||1;
@@ -947,8 +956,16 @@ function showOv(kind){
     <div><button class="btn big green wide" data-a="next">Màn tiếp theo${ico('next')}</button></div>
     <div class="row"><button class="btn gold" data-a="restart">${ico('redo')}Chơi lại</button><button class="btn grey" data-a="menu">${ico('home')}Về menu</button></div></div>`;
   }else if(kind==='timeup'){
-    h=`<div class="card" style="--tone:#f97316">${badge('hourglass','#f97316')}<h2>Hết giờ!</h2><p>Màn ${G.lv} · ${G.mode} giây. Còn ${G.buses.filter(b=>b.state!=='leave'&&b.state!=='gone').length} xe chưa rời bãi.</p>
-    <div><button class="btn big green wide" data-a="restart">${ico('redo')}Thử lại</button></div>
+    const all=Object.entries(players).sort((a,b)=>b[1].score-a[1].score||a[0].localeCompare(b[0]));
+    const myRank=all.findIndex(e=>e[0]===S.name)+1;
+    const row=(e,i)=>'<li class="'+(e[0]===S.name?'me':'')+'"><span class="rk">'+(i+1)+'</span><span class="nn">'+esc(e[0])+'</span><small>Màn '+Math.max(e[1].level||1,e[1].tlevel||1)+'</small><b>'+e[1].score+'</b></li>';
+    const top=all.slice(0,5).map(row).join('')+(myRank>5?'<li style="justify-content:center;background:none;padding:0;min-height:0;color:var(--muted)">⋯</li>'+row(all[myRank-1],myRank-1):'');
+    h=`<div class="card" style="--tone:#f97316">${badge('hourglass','#f97316')}<h2>${G.jam?'Kẹt xe!':'Hết giờ!'}</h2>
+    <p style="margin:0 0 4px"><b>${esc(S.name)}</b> · ${G.mode} giây · qua ${RUN.lv} màn</p>
+    <div class="earn"><i class="coin"></i>${RUN.pts} điểm</div>
+    <p style="margin:-6px 0 10px">Tổng điểm tất cả các màn${myRank?' · Hạng <b>'+myRank+'</b>':''}</p>
+    <ol class="board">${top}</ol>
+    <div><button class="btn big green wide" data-a="restart">${ico('redo')}Chơi lại</button></div>
     <div class="row"><button class="btn gold" data-a="timed">${ico('clock')}Đổi thời gian</button><button class="btn grey" data-a="menu">${ico('home')}Về menu</button></div></div>`;
   }else if(kind==='lost'){
     h=`<div class="card" style="--tone:#e5484d">${badge('jam','#e5484d')}<h2>Kẹt xe rồi!</h2><p>Bãi đậu đầy mà không còn khách đúng màu trên băng chuyền.</p>
@@ -958,19 +975,19 @@ function showOv(kind){
 }
 function hideOv(){ov.className='';ov.innerHTML='';}
 function act(a){
-  SFX.click();
+  SFX.click();if(a!=='clearboard')clearArm=false;
   switch(a){
     case'play':if(!applyName())break;hideOv();startLevel(S.level,0);break;
     case'timed':if(!applyName())break;showOv('modes');break;
     case'board':{const el=document.getElementById('nm');if(el)draft=el.value;showOv('board');break;}
-    case'clearboard':if(confirm('Xoá toàn bộ bảng điểm và tiến trình của mọi học sinh?')){players={};store.set('players',players);S.coins=0;S.level=1;S.tlevel=1;}showOv('board');break;
-    case't30':case't45':case't60':hideOv();startLevel(S.tlevel,+a.slice(1));break;
+    case'clearboard':if(!clearArm){clearArm=true;showOv('board');setTimeout(()=>{if(clearArm){clearArm=false;if(ov.querySelector('[data-a="clearboard"]'))showOv('board');}},4000);}else{clearArm=false;players={};store.set('players',players);S.coins=0;S.level=1;S.tlevel=1;draft=null;showOv('board');}break;
+    case't30':case't45':case't60':RUN={pts:0,lv:0};S.tlevel=1;hideOv();startLevel(1,+a.slice(1));break;
     case'sound':{const el=document.getElementById('nm');if(el)draft=el.value;}S.sound=!S.sound;store.set('sound',S.sound);if(S.sound)SFX.click();showOv(G&&screen==='play'?'pause':'menu');break;
     case'help':showOv('help');break;
     case'pause':G.paused=true;showOv('pause');break;
     case'resume':G.paused=false;hideOv();break;
-    case'restart':hideOv();startLevel(G?G.lv:S.level,G?G.mode:0);break;
-    case'next':{const m=G?G.mode:0;hideOv();startLevel(m?S.tlevel:S.level,m);break;}
+    case'restart':{const m=G?G.mode:0;if(m){RUN={pts:0,lv:0};S.tlevel=1;hideOv();startLevel(1,m);}else{hideOv();startLevel(G?G.lv:S.level,0);}break;}
+    case'next':{const m=G?G.mode:0,c=(m&&G)?G.timeLeft:0;hideOv();startLevel(m?S.tlevel:S.level,m,c);break;}
     case'menu':G=null;screen='menu';showOv('menu');break;
   }
 }
@@ -1012,7 +1029,7 @@ addEventListener('keydown',e=>{
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&G&&screen==='play'&&G.state==='play'&&!G.paused)act('pause');});
 addEventListener('resize',()=>{
   layout();
-  if(G&&G.moves===0&&!G.paused&&G.state==='play'){const d=calcDims();if(d.cols!==G.cols||d.rows!==G.rows)startLevel(G.lv,G.mode);}
+  if(G&&G.moves===0&&!G.paused&&G.state==='play'){const d=calcDims();if(d.cols!==G.cols||d.rows!==G.rows)startLevel(G.lv,G.mode,G.mode?G.timeLeft:0);}
 });
 
 /* ====================== chạy ====================== */
